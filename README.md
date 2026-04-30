@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://via.placeholder.com/150x150.png?text=CosmicSec" alt="CosmicSec Logo" width="120" />
+  <img src="assets/logo.png" alt="GuardAxisSphere Logo" width="160" />
   <h1>🌐 GuardAxisSphere (CosmicSec Web)</h1>
   <p><strong>The premium, unified interface for the CosmicSec Threat Intelligence Platform.</strong></p>
   
