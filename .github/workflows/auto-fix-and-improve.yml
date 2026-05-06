@@ -41,7 +41,11 @@ jobs:
 
       - name: 📦 Install Dependencies
         run: |
-          npm ci || npm install
+          if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ] || [ -f yarn.lock ]; then
+            npm ci
+          else
+            npm install
+          fi
           npm install -g prettier eslint markdownlint-cli
 
       - name: 🔍 Run Code Quality Checks
