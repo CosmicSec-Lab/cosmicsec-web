@@ -1,226 +1,182 @@
-import { Link, useLocation } from "react-router-dom";
-import { useEffect } from "react";
+/**
+ * Premium Sidebar with collapsible groups, icons, active states, and glow effects.
+ */
+import { useState } from "react";
+import { NavLink, useLocation } from "react-router-dom";
 import {
-  Activity,
-  Brain,
-  Bug,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  FileText,
-  Globe,
   LayoutDashboard,
-  LogOut,
-  Menu,
-  MessageSquare,
-  Radar,
-  Settings,
   Shield,
-  User,
-  X,
+  Search,
+  AlertTriangle,
+  Bug,
+  FileCheck,
+  ScanLine,
+  Globe,
+  Brain,
+  Bot,
+  FileText,
+  DollarSign,
+  Settings,
+  Users,
+  Activity,
+  ChevronDown,
+  ChevronRight,
   Zap,
-  TerminalSquare,
-} from "lucide-react";
-import { useAuth } from "../context/AuthContext";
+} from "lucide-react"; // lucide-react is already in most React setups
 
 interface NavItem {
+  path: string;
   label: string;
-  to: string;
   icon: React.ElementType;
-  adminOnly?: boolean;
+  badge?: number;
+  roles?: string[];
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { label: "Dashboard", to: "/dashboard", icon: LayoutDashboard },
-  { label: "Scans", to: "/scans", icon: Radar },
-  { label: "Recon", to: "/recon", icon: Globe },
-  { label: "AI Analysis", to: "/ai", icon: Brain },
-  { label: "AI Chat", to: "/ai/chat", icon: MessageSquare },
-  { label: "Timeline", to: "/timeline", icon: Clock },
-  { label: "Reports", to: "/reports", icon: FileText },
-  { label: "Bug Bounty", to: "/bugbounty", icon: Bug },
-  { label: "Panels Hub", to: "/panels", icon: TerminalSquare },
-  { label: "SOC / Phase5", to: "/phase5", icon: Activity },
-  { label: "Agents", to: "/agents", icon: Zap },
-  { label: "Admin", to: "/admin", icon: Shield, adminOnly: true },
+const navGroups = [
+  {
+    label: "Operations",
+    items: [
+      { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { path: "/soc", label: "SOC Center", icon: Shield, badge: 5 },
+      { path: "/threat-hunt", label: "Threat Hunting", icon: Search },
+      { path: "/incidents", label: "Incidents", icon: AlertTriangle, badge: 12 },
+      { path: "/vulnerabilities", label: "Vulnerabilities", icon: Bug, badge: 8 },
+      { path: "/compliance", label: "Compliance", icon: FileCheck },
+    ],
+  },
+  {
+    label: "Security Tools",
+    items: [
+      { path: "/scans", label: "Scans", icon: ScanLine },
+      { path: "/recon", label: "Recon", icon: Globe },
+      { path: "/ai", label: "AI Analysis", icon: Brain },
+      { path: "/agents", label: "Agents", icon: Bot },
+    ],
+  },
+  {
+    label: "Business",
+    items: [
+      { path: "/reports", label: "Reports", icon: FileText },
+      { path: "/bug-bounty", label: "Bug Bounty", icon: DollarSign },
+      { path: "/timeline", label: "Timeline", icon: Activity },
+    ],
+  },
+  {
+    label: "System",
+    items: [
+      { path: "/settings", label: "Settings", icon: Settings },
+      { path: "/system-status", label: "System Status", icon: Activity },
+      { path: "/admin", label: "Admin", icon: Users, roles: ["admin"] },
+    ],
+  },
 ];
 
-interface SidebarProps {
-  mobileOpen: boolean;
-  onMobileClose: () => void;
-  collapsed: boolean;
-  onCollapsedChange: (collapsed: boolean) => void;
-}
-
-export function Sidebar({ mobileOpen, onMobileClose, collapsed, onCollapsedChange }: SidebarProps) {
+export function Sidebar() {
   const location = useLocation();
-  const { user, logout } = useAuth();
+  const [collapsed, setCollapsed] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<string[]>(["Operations"]);
 
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onMobileClose();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [onMobileClose]);
+  const toggleGroup = (label: string) => {
+    setExpandedGroups((prev) =>
+      prev.includes(label) ? prev.filter((g) => g !== label) : [...prev, label]
+    );
+  };
 
-  const isActive = (to: string) =>
-    to === "/admin" ? location.pathname === "/admin" : location.pathname.startsWith(to);
+  const isActive = (path: string) => location.pathname === path;
 
   return (
-    <>
-      {/* Mobile overlay */}
-      {mobileOpen && (
-        <div
-          className="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm md:hidden"
-          onClick={onMobileClose}
-        />
-      )}
-
-      {/* Sidebar panel */}
-      <aside
-        className={[
-          "fixed inset-y-0 left-0 z-40 flex flex-col border-r border-slate-800 bg-slate-950 transition-all duration-300",
-          collapsed ? "w-16" : "w-64",
-          mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
-        ].join(" ")}
-      >
-        {/* Header */}
-        <div className="flex h-16 items-center justify-between border-b border-slate-800 px-4">
-          {!collapsed && (
-            <div className="flex items-center gap-2">
-              <Shield className="h-6 w-6 shrink-0 text-cyan-400" />
-              <span className="text-lg font-bold tracking-tight text-slate-100">CosmicSec</span>
-            </div>
-          )}
-          {collapsed && <Shield className="mx-auto h-6 w-6 text-cyan-400" />}
-
-          <div className="flex items-center gap-1">
-            {/* Mobile close button */}
-            <button
-              onClick={onMobileClose}
-              className="rounded p-1 text-slate-400 hover:text-white md:hidden"
-              aria-label="Close sidebar"
-            >
-              <X className="h-4 w-4" />
-            </button>
-            {/* Desktop collapse toggle */}
-            <button
-              onClick={() => onCollapsedChange(!collapsed)}
-              className="hidden rounded p-1 text-slate-400 hover:text-white md:block"
-              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            >
-              {collapsed ? (
-                <ChevronRight className="h-4 w-4" />
-              ) : (
-                <ChevronLeft className="h-4 w-4" />
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Nav items */}
-        <nav
-          role="navigation"
-          aria-label="Main navigation"
-          className="flex-1 overflow-y-auto px-2 py-4"
-        >
-          <ul className="space-y-1">
-            {NAV_ITEMS.filter((item) => !item.adminOnly || user?.role === "admin").map(
-              ({ label, to, icon: Icon }) => (
-                <li key={to}>
-                  <Link
-                    to={to}
-                    onClick={onMobileClose}
-                    title={collapsed ? label : undefined}
-                    aria-current={isActive(to) ? "page" : undefined}
-                    className={[
-                      "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                      isActive(to)
-                        ? "bg-cyan-500/10 text-cyan-400 ring-1 ring-cyan-500/30"
-                        : "text-slate-400 hover:bg-slate-800 hover:text-slate-100",
-                      collapsed ? "justify-center" : "",
-                    ].join(" ")}
-                  >
-                    <Icon className="h-4 w-4 shrink-0" />
-                    {!collapsed && <span>{label}</span>}
-                  </Link>
-                </li>
-              ),
-            )}
-          </ul>
-        </nav>
-
-        {/* Settings + User info + logout */}
-        <div className="border-t border-slate-800 p-3">
-          {/* Settings link */}
-          <Link
-            to="/settings"
-            onClick={onMobileClose}
-            title={collapsed ? "Settings" : undefined}
-            aria-current={isActive("/settings") ? "page" : undefined}
-            className={[
-              "mb-2 flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-              isActive("/settings")
-                ? "bg-cyan-500/10 text-cyan-400"
-                : "text-slate-400 hover:bg-slate-800 hover:text-slate-100",
-              collapsed ? "justify-center" : "",
-            ].join(" ")}
-          >
-            <Settings className="h-4 w-4 shrink-0" />
-            {!collapsed && <span>Settings</span>}
-          </Link>
-
-          {!collapsed ? (
-            <div className="mb-2 flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-cyan-500/20 text-cyan-400">
-                <User className="h-4 w-4" />
-              </div>
-              <div className="min-w-0">
-                <p className="truncate text-xs font-medium text-slate-200">{user?.email ?? "—"}</p>
-                <p className="truncate text-xs capitalize text-slate-500">{user?.role ?? "user"}</p>
-              </div>
-            </div>
-          ) : (
-            <div className="mb-2 flex justify-center">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-cyan-500/20 text-cyan-400">
-                <User className="h-4 w-4" />
-              </div>
-            </div>
-          )}
-          <button
-            onClick={logout}
-            title={collapsed ? "Log out" : undefined}
-            className={[
-              "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-400 transition-colors hover:bg-rose-500/10 hover:text-rose-400",
-              collapsed ? "justify-center" : "",
-            ].join(" ")}
-          >
-            <LogOut className="h-4 w-4 shrink-0" />
-            {!collapsed && <span>Log out</span>}
-          </button>
-        </div>
-      </aside>
-    </>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/* Mobile hamburger trigger — exported separately for use in AppLayout        */
-/* -------------------------------------------------------------------------- */
-
-interface HamburgerProps {
-  onClick: () => void;
-}
-
-export function HamburgerButton({ onClick }: HamburgerProps) {
-  return (
-    <button
-      onClick={onClick}
-      className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white md:hidden"
-      aria-label="Open sidebar"
+    <aside
+      className={`h-screen bg-slate-900 border-r border-slate-800 flex flex-col transition-all duration-300 ${
+        collapsed ? "w-20" : "w-64"
+      }`}
     >
-      <Menu className="h-5 w-5" />
-    </button>
+      {/* Logo */}
+      <div className="flex items-center justify-between p-4 border-b border-slate-800">
+        {!collapsed && (
+          <div className="flex items-center gap-2">
+            <Zap className="w-6 h-6 text-blue-500" />
+            <span className="font-bold text-white text-lg">CosmicSec</span>
+          </div>
+        )}
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
+        >
+          {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </button>
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-6">
+        {navGroups.map((group) => (
+          <div key={group.label}>
+            {!collapsed && (
+              <button
+                onClick={() => toggleGroup(group.label)}
+                className="flex items-center justify-between w-full px-2 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider hover:text-slate-300 transition-colors"
+              >
+                {group.label}
+                {expandedGroups.includes(group.label) ? (
+                  <ChevronDown className="w-3 h-3" />
+                ) : (
+                  <ChevronRight className="w-3 h-3" />
+                )}
+              </button>
+            )}
+            {expandedGroups.includes(group.label) && (
+              <div className="space-y-1">
+                {group.items.map((item) => (
+                  <NavLink
+                    key={item.path}
+                    to={item.path}
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative ${
+                      isActive(item.path)
+                        ? "bg-blue-600/20 text-blue-400 border-r-2 border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.3)]"
+                        : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                    }`}
+                  >
+                    <item.icon className={`w-5 h-5 ${isActive(item.path) ? "text-blue-400" : "text-slate-500 group-hover:text-slate-300"}`} />
+                    {!collapsed && (
+                      <>
+                        <span className="text-sm font-medium flex-1">{item.label}</span>
+                        {item.badge && (
+                          <span className="px-2 py-0.5 text-xs font-bold bg-red-500 text-white rounded-full animate-pulse">
+                            {item.badge}
+                          </span>
+                        )}
+                      </>
+                    )}
+                    {isActive(item.path) && (
+                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-blue-500 rounded-r-full" />
+                    )}
+                  </NavLink>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </nav>
+
+      {/* User Mini Profile */}
+      <div className="p-4 border-t border-slate-800">
+        {!collapsed ? (
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm">
+              A
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-white truncate">Admin</p>
+              <p className="text-xs text-slate-500">admin@cosmicsec.com</p>
+            </div>
+          </div>
+        ) : (
+          <div className="w-8 h-8 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm mx-auto">
+            A
+          </div>
+        )}
+      </div>
+    </aside>
   );
 }
+
+export default Sidebar;

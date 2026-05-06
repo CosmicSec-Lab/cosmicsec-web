@@ -6,10 +6,25 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 
 export type Theme = "dark" | "light";
 
+interface ThemeColors {
+  primary: string;
+  secondary: string;
+  background: string;
+  surface: string;
+  text: string;
+  textSecondary: string;
+  border: string;
+  danger: string;
+  warning: string;
+  success: string;
+  info: string;
+}
+
 interface ThemeState {
   theme: Theme;
   highContrast: boolean;
   reducedMotion: boolean;
+  colors: ThemeColors;
   toggleTheme: () => void;
   setTheme: (theme: Theme) => void;
   setHighContrast: (enabled: boolean) => void;
@@ -69,6 +84,33 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       theme,
       highContrast,
       reducedMotion,
+      colors: theme === "dark" 
+        ? {
+            primary: '#00ff88',
+            secondary: '#0099ff',
+            background: '#0a0e27',
+            surface: '#1a1f3a',
+            text: '#ffffff',
+            textSecondary: '#a0a0b0',
+            border: '#2a2f4a',
+            danger: '#ff0000',
+            warning: '#ff9900',
+            success: '#00ff88',
+            info: '#0099ff'
+          }
+        : {
+            primary: '#0066cc',
+            secondary: '#6b7280',
+            background: '#f8fafc',
+            surface: '#ffffff',
+            text: '#1e293b',
+            textSecondary: '#64748b',
+            border: '#e2e8f0',
+            danger: '#ef4444',
+            warning: '#f59e0b',
+            success: '#10b981',
+            info: '#3b82f6'
+          },
       toggleTheme,
       setTheme,
       setHighContrast,
