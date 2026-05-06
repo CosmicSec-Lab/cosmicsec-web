@@ -1,0 +1,85 @@
+name: ✨ Feature Request
+description: Suggest a new feature or enhancement
+title: "[FEATURE] "
+labels: ["enhancement", "feature-request"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        # ✨ Feature Request
+
+        Share your ideas! Help us make CosmicSec even better.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Is your feature request related to a problem?
+      description: Describe the problem or use case
+      placeholder: "I'm frustrated when..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe how you would like this to work
+      placeholder: "It would be great if..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternative Solutions
+      description: Any alternative approaches you've considered?
+      placeholder: "Other ways this could be solved..."
+
+  - type: textarea
+    id: benefits
+    attributes:
+      label: Benefits & Impact
+      description: What are the benefits of this feature?
+      placeholder: |
+        - Benefit 1
+        - Benefit 2
+        - Benefit 3
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Feature Category
+      options:
+        - "Performance"
+        - "Security"
+        - "Usability"
+        - "Developer Experience"
+        - "Documentation"
+        - "Infrastructure"
+        - "Other"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - "Low"
+        - "Medium"
+        - "High"
+        - "Critical"
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Verification Checklist
+      options:
+        - label: I have searched for existing feature requests
+          required: true
+        - label: This feature aligns with project goals
+          required: false
+        - label: I am willing to help implement this
+          required: false

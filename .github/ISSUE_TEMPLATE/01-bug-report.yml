@@ -1,0 +1,106 @@
+name: 🐛 Bug Report
+description: Report a bug with detailed information
+title: "[BUG] "
+labels: ["bug", "triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        # 🐛 Bug Report
+
+        Thank you for reporting an issue! Please fill in as much detail as possible to help us fix it quickly.
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: How severe is this bug?
+      options:
+        - "🔴 Critical (Application crash/data loss)"
+        - "🟠 High (Feature broken/major impact)"
+        - "🟡 Medium (Workaround available)"
+        - "🟢 Low (Minor issue)"
+      default: 2
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe the bug in detail
+      placeholder: "What is the bug? What did you expect to happen?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: How do we reproduce this issue?
+      placeholder: |
+        1. Step one
+        2. Step two
+        3. Step three
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What should happen?
+      placeholder: "Expected outcome..."
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happens?
+      placeholder: "Actual outcome..."
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Environment & Context
+      description: Additional context about the bug
+      placeholder: |
+        - Browser/OS:
+        - Python/Node version:
+        - Relevant logs:
+        - Other dependencies:
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: If applicable, add screenshots
+      placeholder: "Paste images here"
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component Affected
+      options:
+        - "Core Platform"
+        - "Web Frontend"
+        - "CLI Tool"
+        - "API Services"
+        - "Database/Storage"
+        - "Security/Auth"
+        - "Deployment"
+        - "Other"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Verification Checklist
+      options:
+        - label: I have searched for existing issues
+          required: true
+        - label: I am using the latest version
+          required: true
+        - label: The bug is reproducible
+          required: true
