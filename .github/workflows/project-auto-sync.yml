@@ -1,0 +1,193 @@
+name: 📋 Auto-Sync & Update Project
+
+on:
+  issues:
+    types: [opened, closed, reopened, labeled]
+  pull_request:
+    types: [opened, closed, reopened, ready_for_review]
+  workflow_run:
+    workflows: ["🤖 Advanced Auto-Fix & Enhancement Pipeline"]
+    types: [completed]
+
+jobs:
+  # Job 1: Add to Project
+  add-to-project:
+    name: 📥 Add Issue/PR to Project
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_run'
+
+    steps:
+      - name: 📋 Add Issue to Project
+        if: github.event_name == 'issues'
+        uses: actions/add-to-project@v1.0.1
+        with:
+          github-token: ${{ secrets.ORG_PROJECT_PAT || secrets.GITHUB_TOKEN }}
+          project-url: https://github.com/orgs/CosmicSec-Lab/projects/2
+
+      - name: 📋 Add PR to Project
+        if: github.event_name == 'pull_request'
+        uses: actions/add-to-project@v1.0.1
+        with:
+          github-token: ${{ secrets.ORG_PROJECT_PAT || secrets.GITHUB_TOKEN }}
+          project-url: https://github.com/orgs/CosmicSec-Lab/projects/2
+
+  # Job 2: Update Status
+  update-status:
+    name: 🔄 Update Project Status
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 🔄 Determine Status
+        id: status
+        run: |
+          if [ "${{ github.event.action }}" == "closed" ]; then
+            echo "project-status=Done" >> $GITHUB_OUTPUT
+            echo "status-emoji=✅" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.action }}" == "ready_for_review" ]; then
+            echo "project-status=In Review" >> $GITHUB_OUTPUT
+            echo "status-emoji=👀" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.action }}" == "opened" ]; then
+            echo "project-status=To do" >> $GITHUB_OUTPUT
+            echo "status-emoji=📝" >> $GITHUB_OUTPUT
+          else
+            echo "project-status=In Progress" >> $GITHUB_OUTPUT
+            echo "status-emoji=🔄" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 📤 Create Issue Comment
+        if: github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '📋 Added to project: [CosmicSec Project](https://github.com/orgs/CosmicSec-Lab/projects/2)\n' +
+                    '⏱️ Status: ${{ steps.status.outputs.status-emoji }} ${{ steps.status.outputs.project-status }}'
+            })
+
+  # Job 3: Auto-Label
+  auto-label:
+    name: 🏷️ Auto-Label Issues
+    runs-on: ubuntu-latest
+    if: github.event_name == 'issues' && github.event.action == 'opened'
+
+    steps:
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 🏷️ Analyze & Label
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.issue.body || '';
+            const labels = [];
+            
+            // Severity labels
+            if (body.includes('Critical') || body.includes('critical')) labels.push('severity-critical');
+            else if (body.includes('High') || body.includes('high')) labels.push('severity-high');
+            else if (body.includes('Medium') || body.includes('medium')) labels.push('severity-medium');
+            else if (body.includes('Low') || body.includes('low')) labels.push('severity-low');
+            
+            // Type labels
+            if (body.includes('Bug') || body.includes('bug')) labels.push('type-bug');
+            if (body.includes('Feature') || body.includes('feature')) labels.push('type-enhancement');
+            if (body.includes('Security') || body.includes('security')) labels.push('type-security');
+            if (body.includes('Documentation') || body.includes('documentation')) labels.push('type-docs');
+            
+            // Component labels
+            if (body.includes('Frontend') || body.includes('frontend') || body.includes('UI')) labels.push('component-frontend');
+            if (body.includes('Backend') || body.includes('backend') || body.includes('API')) labels.push('component-backend');
+            if (body.includes('Database') || body.includes('database')) labels.push('component-database');
+            
+            // Remove duplicates and add
+            const uniqueLabels = [...new Set(labels)];
+            if (uniqueLabels.length > 0) {
+              github.rest.issues.addLabels({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                labels: uniqueLabels
+              });
+              
+              console.log(`Added labels: ${uniqueLabels.join(', ')}`);
+            }
+
+  # Job 4: Link Related Issues
+  link-issues:
+    name: 🔗 Link Related Issues
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.event.action == 'opened'
+
+    steps:
+      - name: 🔗 Extract Issue References
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.pull_request.body || '';
+            const issueRegex = /#(\d+)/g;
+            const matches = [...body.matchAll(issueRegex)];
+            
+            if (matches.length > 0) {
+              console.log(`Found ${matches.length} linked issues`);
+              const issueNum = matches[0][1];
+              
+              // Create comment on original issue
+              github.rest.issues.createComment({
+                issue_number: parseInt(issueNum),
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: `🔗 Linked PR: #${{ github.event.pull_request.number }}`
+              });
+            }
+
+  # Job 5: Report Workflow Results
+  report-results:
+    name: 📊 Report Workflow Results
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_run'
+
+    steps:
+      - name: 📥 Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: workflow-artifacts
+          name: code-analysis-reports
+        continue-on-error: true
+
+      - name: 📊 Create Summary Comment
+        uses: actions/github-script@v7
+        continue-on-error: true
+        with:
+          script: |
+            // Find PR associated with this workflow run
+            const prs = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              head: context.payload.workflow_run.head_branch
+            });
+            
+            if (prs.data.length > 0) {
+              const pr = prs.data[0];
+              github.rest.issues.createComment({
+                issue_number: pr.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: '## 🤖 Auto-Fix Pipeline Complete\n\n' +
+                      '✅ Code analysis and auto-fixing completed\n' +
+                      '📊 Check workflow artifacts for detailed reports\n' +
+                      '🔗 [View in Project](https://github.com/orgs/CosmicSec-Lab/projects/2)'
+              });
+            }
