@@ -80,8 +80,8 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
-      - name: 📦 Install Python Analysis Tools
-        if: steps.detect.outputs.project-type != 'node'
+       - name: 📦 Install Python Analysis Tools
+        if: steps.detect.outputs.has-python == 'true'
         run: |
           python -m pip install --upgrade pip
           pip install \
