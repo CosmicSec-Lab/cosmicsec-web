@@ -39,26 +39,42 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 🔧 Detect Project Type
+       - name: 🔍 Detect Project Languages
         id: detect
         run: |
-          if [ -f "pyproject.toml" ] || [ -f "setup.py" ]; then
-            echo "project-type=python" >> $GITHUB_OUTPUT
-          elif [ -f "package.json" ]; then
-            echo "project-type=node" >> $GITHUB_OUTPUT
+          echo "=== Language Detection ==="
+          
+          # Python detection
+          if find . -name "*.py" -not -path "./.venv/*" -not -path "./node_modules/*" -not -path "./.git/*" | grep -q .; then
+            echo "has-python=true" >> $GITHUB_OUTPUT
+            echo "✅ Python detected"
           else
-            echo "project-type=mixed" >> $GITHUB_OUTPUT
+            echo "has-python=false" >> $GITHUB_OUTPUT
+            echo "❌ No Python files"
+          fi
+          
+          # Node.js detection (search all subdirectories)
+          if find . -name "package.json" -not -path "./node_modules/*" -not -path "./.git/*" | grep -q .; then
+            echo "has-node=true" >> $GITHUB_OUTPUT
+            echo "✅ Node.js detected"
+            
+            # Store all package.json locations
+            locations=$(find . -name "package.json" -not -path "./node_modules/*" -not -path "./.git/*" | tr '\n' ',')
+            echo "package-json-locations=$locations" >> $GITHUB_OUTPUT
+          else
+            echo "has-node=false" >> $GITHUB_OUTPUT
+            echo "❌ No Node.js projects"
           fi
 
-      - name: 🐍 Setup Python (if needed)
-        if: steps.detect.outputs.project-type != 'node'
+      - name: 🐍 Setup Python
+        if: steps.detect.outputs.has-python == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
 
-      - name: 🟢 Setup Node.js (if needed)
-        if: steps.detect.outputs.project-type != 'python'
+      - name: 🟢 Setup Node.js
+        if: steps.detect.outputs.has-node == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -73,7 +89,7 @@ jobs:
             pytest-cov radon vulture autoflake autopep8 requests
 
       - name: 📦 Install Node Analysis Tools
-        if: steps.detect.outputs.project-type != 'python'
+        if: steps.detect.outputs.has-node == 'true'
         run: |
           npm install -g \
             eslint prettier markdownlint-cli \
@@ -85,16 +101,16 @@ jobs:
         run: |
           mkdir -p analysis-reports
           
-          # Python Analysis
-          if [ -f "pyproject.toml" ] || [ -f "setup.py" ]; then
+          # Python Analysis (at repo root)
+          if [ "${{ steps.detect.outputs.has-python }}" = "true" ]; then
             echo "=== PYLINT ===" >> analysis-reports/pylint.txt
-            find . -name "*.py" -not -path "./.venv/*" -not -path "./__pycache__/*" | head -50 | xargs pylint --exit-zero --output-format=json > analysis-reports/pylint.json 2>&1 || true
+            find . -name "*.py" -not -path "./.venv/*" -not -path "./__pycache__/*" -not -path "./node_modules/*" | head -50 | xargs pylint --exit-zero --output-format=json > analysis-reports/pylint.json 2>&1 || true
             
             echo "=== FLAKE8 ===" >> analysis-reports/flake8.txt
-            find . -name "*.py" -not -path "./.venv/*" -not -path "./__pycache__/*" | head -50 | xargs flake8 --format=json > analysis-reports/flake8.json 2>&1 || true
+            find . -name "*.py" -not -path "./.venv/*" -not -path "./__pycache__/*" -not -path "./node_modules/*" | head -50 | xargs flake8 --format=json > analysis-reports/flake8.json 2>&1 || true
             
             echo "=== BANDIT ===" >> analysis-reports/bandit.txt
-            bandit -r . -x .venv,__pycache__,tests -f json > analysis-reports/bandit.json 2>&1 || true
+            bandit -r . -x .venv,__pycache__,node_modules -f json > analysis-reports/bandit.json 2>&1 || true
             
             echo "=== MYPY ===" >> analysis-reports/mypy.txt
             mypy . --ignore-missing-imports --json > analysis-reports/mypy.json 2>&1 || true
@@ -103,14 +119,46 @@ jobs:
             radon cc . --json > analysis-reports/radon.json 2>&1 || true
           fi
           
-          # Node Analysis
-          if [ -f "package.json" ]; then
-            echo "=== ESLINT ===" >> analysis-reports/eslint.txt
-            npx eslint . --format=json > analysis-reports/eslint.json 2>&1 || true
+          # Node.js Analysis (for each package.json found)
+          if [ "${{ steps.detect.outputs.has-node }}" = "true" ]; then
+            echo "🔍 Scanning for package.json files..."
+            
+            # Find all package.json files
+            for pkg_file in $(find . -name "package.json" -not -path "./node_modules/*" -not -path "./.git/*"); do
+              dir=$(dirname "$pkg_file")
+              echo ""
+              echo "📦 Processing: $dir"
+              
+              cd "$dir"
+              
+              # Only install if node_modules doesn't exist or package-lock is newer
+              if [ ! -d "node_modules" ] || [ "package-lock.json" -nt "node_modules" ] || [ "yarn.lock" -nt "node_modules" ]; then
+                echo "  Installing dependencies..."
+                if [ -f "package-lock.json" ]; then
+                  npm ci --prefer-offline --no-audit 2>/dev/null || npm install --prefer-offline --no-audit 2>/dev/null || true
+                else
+                  npm install --prefer-offline --no-audit 2>/dev/null || true
+                fi
+              else
+                echo "  Dependencies already installed, skipping..."
+              fi
+              
+              # Run ESLint if available
+              if [ -f ".eslintrc.json" ] || [ -f ".eslintrc.js" ] || [ -f ".eslintrc.yml" ]; then
+                echo "  Running ESLint..."
+                npx eslint . --format json > "$OLDPWD/analysis-reports/eslint-$(basename "$dir").json" 2>/dev/null || echo "[]" > "$OLDPWD/analysis-reports/eslint-$(basename "$dir").json"
+              fi
+              
+              # Run npm audit
+              echo "  Running npm audit..."
+              npm audit --json > "$OLDPWD/analysis-reports/npm-audit-$(basename "$dir").json" 2>/dev/null || echo "{}" > "$OLDPWD/analysis-reports/npm-audit-$(basename "$dir").json"
+              
+              cd - > /dev/null
+            done
           fi
           
           echo "analysis-available=true" >> $GITHUB_OUTPUT
-          ISSUES=$(find analysis-reports -name "*.json" | wc -l)
+          ISSUES=$(find analysis-reports -name "*.json" 2>/dev/null | wc -l)
           echo "issues-found=${ISSUES}" >> $GITHUB_OUTPUT
 
       - name: 💾 Upload Analysis Reports
@@ -155,14 +203,14 @@ jobs:
           pip install black isort autoflake autopep8
           npm install -g prettier eslint
 
-      - name: 🔧 Run Auto-Fix Script
+       - name: 🔧 Run Auto-Fix Script
         id: fixing
         continue-on-error: true
         run: |
           mkdir -p fixed-code
           
-          # Python fixes
-          if [ -f "pyproject.toml" ] || [ -f "setup.py" ]; then
+          # Python fixes (root level)
+          if [ "${{ steps.detect.outputs.has-python }}" = "true" ]; then
             echo "[*] Running Black formatter..."
             black . --line-length=120 --exclude '.venv' || true
             
@@ -176,13 +224,28 @@ jobs:
             autopep8 --in-place --aggressive --aggressive --recursive . --exclude '.venv' || true
           fi
           
-          # JavaScript fixes
-          if [ -f "package.json" ]; then
-            echo "[*] Running Prettier..."
-            npx prettier --write "src/**/*.{js,jsx,ts,tsx,json,css}" || true
-            
-            echo "[*] Running ESLint fixes..."
-            npx eslint src/ --fix || true
+          # JavaScript fixes (for each Node.js project)
+          if [ "${{ steps.detect.outputs.has-node }}" = "true" ]; then
+            for pkg_file in $(find . -name "package.json" -not -path "./node_modules/*" -not -path "./.git/*"); do
+              dir=$(dirname "$pkg_file")
+              echo "[*] Processing Node.js project in: $dir"
+              
+              cd "$dir"
+              
+              # Prettier formatting
+              if command -v npx &> /dev/null; then
+                echo "  Running Prettier..."
+                npx prettier --write "." 2>/dev/null || true
+              fi
+              
+              # ESLint fixes
+              if [ -f ".eslintrc.json" ] || [ -f ".eslintrc.js" ] || [ -f ".eslintrc.yml" ]; then
+                echo "  Running ESLint fixes..."
+                npx eslint . --fix 2>/dev/null || true
+              fi
+              
+              cd - > /dev/null
+            done
           fi
           
           echo "fixes-applied=$(git diff --name-only | wc -l)" >> $GITHUB_OUTPUT
@@ -194,16 +257,15 @@ jobs:
           git config --local user.email "🤖@cosmicsec.dev"
           git config --local user.name "🤖 CosmicSec Auto-Fixer"
           
-          if [[ ! -z $(git status -s) ]]; then
+          changes=$(git status -s)
+          if [ -n "$changes" ]; then
             git add -A
             git commit -m "🤖 chore: Auto-fix formatting and code quality
 
-- Applied Black, isort, and autoflake for Python
-- Applied Prettier and ESLint fixes for JavaScript
+- Applied Black, isort, and autoflake for Python (if present)
+- Applied Prettier and ESLint fixes for JavaScript/TypeScript
 - Automated code style normalization
-- No functional changes" \
-              -m "Fixes: #${{ github.run_number }}
-Auto-generated by workflow" || true
+- No functional changes" || true
             
             git push origin HEAD:${{ github.ref }} || true
           fi
@@ -276,26 +338,50 @@ Auto-generated by workflow" || true
 
       - name: 📦 Install Dependencies
         run: |
-          if [ -f "pyproject.toml" ]; then
+          # Install Python dependencies if present
+          if [ -f "pyproject.toml" ] || [ -f "setup.py" ]; then
             python -m pip install --upgrade pip
             pip install -e . 2>/dev/null || true
             pip install pytest pytest-cov 2>/dev/null || true
           fi
           
-          if [ -f "package.json" ]; then
-            npm ci
-          fi
+          # Install Node.js dependencies for all projects
+          for pkg_file in $(find . -name "package.json" -not -path "./node_modules/*" -not -path "./.git/*"); do
+            dir=$(dirname "$pkg_file")
+            echo "Installing dependencies in: $dir"
+            cd "$dir"
+            if [ -f "package-lock.json" ]; then
+              npm ci 2>/dev/null || npm install 2>/dev/null || true
+            else
+              npm install 2>/dev/null || true
+            fi
+            cd - > /dev/null
+          done
 
       - name: 🧪 Run Tests
         continue-on-error: true
         run: |
-          if [ -f "pyproject.toml" ]; then
-            pytest tests/ -v --tb=short 2>/dev/null || echo "No tests found"
+          # Python tests
+          if [ -f "pyproject.toml" ] || [ -f "setup.py" ]; then
+            echo "Running Python tests..."
+            pytest tests/ -v --tb=short 2>/dev/null || echo "No Python tests found"
           fi
           
-          if [ -f "package.json" ]; then
-            npm test 2>/dev/null || echo "No tests found"
-          fi
+          # Node.js tests for each project
+          for pkg_file in $(find . -name "package.json" -not -path "./node_modules/*" -not -path "./.git/*"); do
+            dir=$(dirname "$pkg_file")
+            echo "Running tests in: $dir"
+            cd "$dir"
+            if [ -f "package.json" ]; then
+              # Check if test script exists
+              if node -e "const p=require('./package.json'); process.exit(!(p.scripts && p.scripts.test));" 2>/dev/null; then
+                npm test 2>/dev/null || echo "Tests failed or no tests in $dir"
+              else
+                echo "No test script defined in $dir"
+              fi
+            fi
+            cd - > /dev/null
+          done
 
   # Stage 5: Quality Report
   report:
