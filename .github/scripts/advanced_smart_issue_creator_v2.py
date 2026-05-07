@@ -14,6 +14,7 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime
 from collections import defaultdict
 import subprocess
+import requests
 
 
 logging.basicConfig(
@@ -55,6 +56,7 @@ class AdvancedSmartIssueCreator:
         self.verbose = verbose
         self.created_issues = []
         self.failed_issues = []
+        self.existing_open_issues = []
         
         logger.setLevel(logging.DEBUG if verbose else logging.INFO)
     
@@ -67,11 +69,12 @@ class AdvancedSmartIssueCreator:
         try:
             # Load issues from reports
             issues_to_create = self._extract_issues_from_reports()
+            self.existing_open_issues = self._fetch_existing_open_issues()
             
             logger.info(f"\n📋 Found {len(issues_to_create)} potential issues to create")
             
             # Filter and prioritize issues
-            prioritized_issues = self._prioritize_issues(issues_to_create)
+            prioritized_issues = self._prioritize_issues(issues_to_create, self.existing_open_issues)
             
             logger.info(f"✅ Prioritized {len(prioritized_issues)} issues for creation\n")
             
@@ -274,15 +277,56 @@ class AdvancedSmartIssueCreator:
         
         return body
     
-    def _prioritize_issues(self, issues: List[Dict]) -> List[Dict]:
+    def _normalize_title(self, title: str) -> str:
+        """Normalize titles for fuzzy duplicate detection"""
+        cleaned = ''.join(ch.lower() if ch.isalnum() else ' ' for ch in title)
+        stop_words = {'the', 'a', 'an', 'and', 'or', 'for', 'to', 'of', 'in', 'on', 'with', 'fix', 'issue', 'bug', 'task'}
+        return ' '.join(word for word in cleaned.split() if word not in stop_words)
+
+    def _issue_signature(self, issue: Dict) -> str:
+        """Build a coarse duplicate signature for an issue"""
+        title = issue.get('title', '') if isinstance(issue, dict) else str(issue)
+        labels = issue.get('labels', []) if isinstance(issue, dict) else []
+        label_part = ','.join(sorted(label.lower() for label in labels))
+        return f"{self._normalize_title(title)}|{label_part}"
+
+    def _fetch_existing_open_issues(self) -> List[Dict]:
+        """Fetch open issues to avoid creating duplicates."""
+        if not self.repo_owner or not self.repo_name or not self.token:
+            return []
+
+        url = f"{self.api_url}/repos/{self.repo_owner}/{self.repo_name}/issues"
+        headers = {
+            "Authorization": f"token {self.token}",
+            "Accept": "application/vnd.github.v3+json",
+        }
+
+        try:
+            response = requests.get(url, headers=headers, params={"state": "open", "per_page": 100}, timeout=20)
+            if response.status_code != 200:
+                logger.debug(f"   Could not load open issues: HTTP {response.status_code}")
+                return []
+            issues = [issue for issue in response.json() if 'pull_request' not in issue]
+            logger.info(f"   ✓ Loaded {len(issues)} open repository issues for dedupe checks")
+            return issues
+        except Exception as exc:
+            logger.debug(f"   Could not load open issues: {exc}")
+            return []
+
+    def _prioritize_issues(self, issues: List[Dict], existing_issues: List[Dict]) -> List[Dict]:
         """Prioritize and deduplicate issues"""
         logger.info("\n🎯 Prioritizing Issues...")
         
         # Deduplicate by title
         seen_titles = set()
         unique_issues = []
+        existing_signatures = {self._issue_signature(issue) for issue in existing_issues}
         
         for issue in issues:
+            signature = self._issue_signature(issue)
+            if signature in existing_signatures:
+                logger.info(f"   ↪ Skipping duplicate issue already present in repo: {issue['title']}")
+                continue
             if issue['title'] not in seen_titles:
                 unique_issues.append(issue)
                 seen_titles.add(issue['title'])
