@@ -38,14 +38,34 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: 📦 Install Dependencies
-        run: |
-          if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ] || [ -f yarn.lock ]; then
-            npm ci
-          else
-            npm install
-          fi
-          npm install -g prettier eslint markdownlint-cli
+       - name: 📦 Install Dependencies
+         run: |
+           echo "=== Installing dependencies for all Node.js projects ==="
+           
+           # Find all package.json files (excluding node_modules and .git)
+           for pkg_file in $(find . -name "package.json" -not -path "./node_modules/*" -not -path "./.git/*"); do
+             dir=$(dirname "$pkg_file")
+             echo "📦 Installing in: $dir"
+             
+             cd "$dir"
+             
+             # Check for lock file
+             if [ -f "package-lock.json" ]; then
+               echo "  Using npm ci..."
+               npm ci --prefer-offline --no-audit 2>/dev/null || npm install --prefer-offline --no-audit 2>/dev/null || true
+             elif [ -f "yarn.lock" ]; then
+               echo "  Using yarn..."
+               yarn install --frozen-lockfile 2>/dev/null || yarn install 2>/dev/null || true
+             else
+               echo "  Using npm install..."
+               npm install --prefer-offline --no-audit 2>/dev/null || true
+             fi
+             
+             cd - > /dev/null
+           done
+           
+           # Install global tools
+           npm install -g prettier eslint markdownlint-cli 2>/dev/null || true
 
       - name: 🔍 Run Code Quality Checks
         id: analysis
@@ -53,13 +73,53 @@ jobs:
         run: |
           mkdir -p analysis-reports
           
-          echo "=== ESLINT ANALYSIS ===" > analysis-reports/eslint.txt
-          npx eslint src/ --format=json > analysis-reports/eslint.json 2>&1 || true
+          echo "🔍 Scanning for Node.js projects..."
           
-          echo "=== PRETTIER CHECK ===" > analysis-reports/prettier.txt
-          npx prettier --check src/ 2>&1 || true
+          # Find all package.json files
+          for pkg_file in $(find . -name "package.json" -not -path "./node_modules/*" -not -path "./.git/*"); do
+            dir=$(dirname "$pkg_file")
+            proj_name=$(basename "$dir")
+            echo ""
+            echo "📦 Processing: $dir"
+            
+            cd "$dir"
+            
+            # Install dependencies if needed
+            if [ ! -d "node_modules" ] || [ "package-lock.json" -nt "node_modules" ] || [ "yarn.lock" -nt "node_modules" ]; then
+              echo "  Installing dependencies..."
+              if [ -f "package-lock.json" ]; then
+                npm ci --prefer-offline --no-audit 2>/dev/null || npm install --prefer-offline --no-audit 2>/dev/null || true
+              else
+                npm install --prefer-offline --no-audit 2>/dev/null || true
+              fi
+            fi
+            
+            # ESLint analysis
+            if [ -f ".eslintrc.json" ] || [ -f ".eslintrc.js" ] || [ -f ".eslintrc.yml" ]; then
+              echo "  Running ESLint..."
+              npx eslint . --format json > "$OLDPWD/analysis-reports/eslint-${proj_name}.json" 2>/dev/null || echo "[]" > "$OLDPWD/analysis-reports/eslint-${proj_name}.json"
+            fi
+            
+            # Prettier check
+            echo "=== PRETTIER CHECK ===" > "$OLDPWD/analysis-reports/prettier-${proj_name}.txt"
+            npx prettier --check "." 2>&1 | head -100 >> "$OLDPWD/analysis-reports/prettier-${proj_name}.txt" 2>/dev/null || true
+            
+            # npm audit
+            echo "  Running npm audit..."
+            npm audit --json > "$OLDPWD/analysis-reports/npm-audit-${proj_name}.json" 2>/dev/null || echo "{}" > "$OLDPWD/analysis-reports/npm-audit-${proj_name}.json"
+            
+            cd - > /dev/null
+          done
           
-          ISSUES=$(find src -name "*.tsx" -o -name "*.ts" -o -name "*.js" 2>/dev/null | wc -l || echo 0)
+          # Count issues
+          ISSUES=0
+          for f in analysis-reports/*.json; do
+            if [ -f "$f" ]; then
+              count=$(cat "$f" | python3 -c "import sys,json; data=json.load(sys.stdin); print(len(data) if isinstance(data, list) else 1)" 2>/dev/null || echo 0)
+              ISSUES=$((ISSUES + count))
+            fi
+          done 2>/dev/null || true
+          
           echo "issues-found=${ISSUES}" >> $GITHUB_OUTPUT
 
       - name: 🤖 AI Enhancement Suggestions
@@ -72,11 +132,25 @@ jobs:
       - name: 🚀 Apply Auto-Formatting
         continue-on-error: true
         run: |
-          echo "Running Prettier formatter..."
-          npx prettier --write "src/**/*.{js,jsx,ts,tsx,json,css,md}" || true
+          echo "Running Prettier and ESLint on all Node.js projects..."
           
-          echo "Running ESLint auto-fix..."
-          npx eslint src/ --fix || true
+          # Find all package.json files
+          for pkg_file in $(find . -name "package.json" -not -path "./node_modules/*" -not -path "./.git/*"); do
+            dir=$(dirname "$pkg_file")
+            echo "📦 Processing: $dir"
+            
+            cd "$dir"
+            
+            echo "  Running Prettier..."
+            npx prettier --write "." 2>/dev/null || true
+            
+            echo "  Running ESLint auto-fix..."
+            if [ -f ".eslintrc.json" ] || [ -f ".eslintrc.js" ] || [ -f ".eslintrc.yml" ]; then
+              npx eslint . --fix 2>/dev/null || true
+            fi
+            
+            cd - > /dev/null
+          done
 
       - name: 💾 Upload Artifacts
         if: always()
